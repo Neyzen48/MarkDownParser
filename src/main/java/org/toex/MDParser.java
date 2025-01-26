@@ -1,6 +1,7 @@
 package org.toex;
 
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.regex.Matcher;
@@ -9,8 +10,8 @@ import java.util.regex.Pattern;
 public class MDParser {
 
     private final Pattern hPattern = Pattern.compile("^(\\s{0,3}#+) +(.*)");
-    private final Pattern olPattern = Pattern.compile("^(\\s{0,3}\\d\\s).*");
-    private final Pattern ulPattern = Pattern.compile("^(\\s{0,3}[-+*]\\s).*"); //
+    private final Pattern olPattern = Pattern.compile("^ {0,3}(\\d). (.*)");
+    private final Pattern ulPattern = Pattern.compile("^ {0,3}([-+*]) (.*)"); //
     private final Pattern tb1Pattern = Pattern.compile("(?m)^( {0,3}-+ *)(?!.)");
     private final Pattern boldPattern = Pattern.compile(""); // TO DO
 
@@ -19,6 +20,7 @@ public class MDParser {
     private final Pattern blockCodePattern = Pattern.compile("(?m)^ {0,3}`{3} *(.*)\\n((?:.*|\\n)+)\\n {0,3}`{3,}"); // Tested
 
     int inList = 0;
+
 
     private String mergeLines(String mdText) { // Tested
         while(continuePattern.matcher(mdText).find()) { // finds any line that is not a new paragraph
@@ -50,66 +52,92 @@ public class MDParser {
         return html; // returns built tree back to
     }
 
-    public int getIndent(String line) {
-        int indent = 0;
-        for (char c : line.toCharArray()) {
-            if (c == ' ') {
-                indent++;
-            } else {
-                break;
-            }
-        }
-        return indent;
-    }
-
-    public boolean parseOL(HTMLElement html, ListIterator<String> i, int indent) {
-        String line = i.next();
-        if(indent == 0) {
-            indent = getIndent(line);
-        }
-        if (olPattern.matcher(line).find()) {
-            inList++;
-            HTMLElement ol = new HTMLElement("ol", (HTMLElement) null);
-            HTMLElement li = new HTMLElement("li", (HTMLElement) null);
-            try {
-                ol.add(li);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-            parseMarkdown(li, i, indent);
-
-        }
-        i.previous();
-        return false;
-    }
-
     private void parseMarkdown(HTMLElement html, String md) {
-        List lines = Arrays.asList(md.split("\n")); // separates markdown into lines
+        LinkedList<String> lines = new LinkedList<>(Arrays.asList(md.split("\n"))); // separates markdown into lines
         ListIterator<String> lineIterator = lines.listIterator(); // initializes iterator to iterate between lines
         parseMarkdown(html, lineIterator, 0); // calls recursive version of this parser function to build html
     }
 
     private void parseMarkdown(HTMLElement html, ListIterator<String> i, int indent) {
         if(i.hasNext()) {
-            if(parseHeader(html, i)) { // if next line is header then parse it
-                parseMarkdown(html, i, indent); // if something parsed then continue to parse next lines
-            } else if(parseOL(html, i, indent)) { // if next line is the beginning of a list then parse it
+            if(parseHeader(html, i) || parseOL(html, i, 0, indent) || parseUL(html, i, 0, indent)) {
                 parseMarkdown(html, i, indent); // if something parsed then continue to parse next lines
             } else parseParagraph(html, i);
-            parseMarkdown(html, i, indent); // if something parsed then continue to parse next lines
+            if (inList == 0) {
+                parseMarkdown(html, i, indent); // if something parsed then continue to parse next lines
+            }
         }
+    }
+
+    public boolean parseOL(HTMLElement html, ListIterator<String> i, int parentIndent, int indent) {
+        String line = i.next();
+        Matcher olMatcher = olPattern.matcher(line);
+        if (olMatcher.find()) {
+            HTMLElement currentTree = html;
+            if(inList == 0 || olMatcher.start(1) >= parentIndent+indent + 3) {
+                parentIndent = parentIndent + indent;
+                indent = olMatcher.start(1) - parentIndent;
+                currentTree = new HTMLElement("ol", (HTMLElement) null);
+                try {
+                    html.add(currentTree);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+                inList++;
+            } else if(olMatcher.start(1) < parentIndent + 3) {
+                currentTree = currentTree.getParent();
+                indent = 0;
+                inList--;
+            }
+            i.remove();
+            i.add(olMatcher.group(2));
+            i.previous();
+            parseMarkdown(currentTree, i, indent);
+            if(i.hasNext())  if(!parseOL(currentTree, i, parentIndent, indent)) inList=0;
+            return true;
+        }
+        i.previous();
+        return false;
+    }
+
+    public boolean parseUL(HTMLElement html, ListIterator<String> i, int parentIndent, int indent) {
+        String line = i.next();
+        Matcher ulMatcher = ulPattern.matcher(line);
+        if (ulMatcher.find()) {
+            HTMLElement currentTree = html;
+            if(inList == 0 || ulMatcher.start(1) >= parentIndent+indent + 2) {
+                parentIndent = parentIndent + indent;
+                indent = ulMatcher.start(1) - parentIndent;
+                currentTree = new HTMLElement("ul", (HTMLElement) null);
+                try {
+                    html.add(currentTree);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+                inList++;
+            } else if(ulMatcher.start(1) < parentIndent + 2) {
+                System.out.println("here");
+                currentTree = currentTree.getParent();
+                indent = 0;
+                inList--;
+            }
+            i.remove();
+            i.add(ulMatcher.group(2));
+            i.previous();
+            parseMarkdown(currentTree, i, indent);
+            if(i.hasNext()) if(!parseUL(currentTree, i, parentIndent, indent)) inList=0;
+            return true;
+        }
+        i.previous();
+        return false;
     }
 
     private void parseParagraph(HTMLElement html, ListIterator<String> i) {
         String line = i.next();
         try {
-            HTMLElement textContent = new HTMLElement(line);
-            if (inList == 0) {
-                HTMLElement p = new HTMLElement("p", textContent);
-                html.add(p);
-            } else {
-                html.add(textContent);
-            }
+            HTMLElement textContent = new HTMLElement(line + " (" + inList+")");
+            HTMLElement text = new HTMLElement((inList > 0) ? "li" : "p", textContent);
+            html.add(text);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

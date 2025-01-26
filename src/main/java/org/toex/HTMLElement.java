@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 
 public class HTMLElement implements Iterable{
+    HTMLElement parent;
     String tag;
     String data;
     ArrayList<HTMLElement> elements = new ArrayList<>();
@@ -34,7 +35,12 @@ public class HTMLElement implements Iterable{
         if(data != null) {
             throw new Exception("Diese HTML-Element enthält schon ein Data.");
         }
+        e.parent = this;
         elements.add(e);
+    }
+
+    public HTMLElement getParent() {
+        return parent;
     }
 
     @Override
