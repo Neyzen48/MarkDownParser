@@ -60,13 +60,23 @@ public class HTMLElement implements Iterable{
         if(elements.isEmpty()) {
             return data;
         }
+        StringBuilder sb = new StringBuilder();
         String inlineTags = "(p|h\\d|strong|span|em|i|title|a|img)";
-        String toReturn = (!tag.matches(inlineTags) ? "\n" : "");
+
+        sb.append("<").append(tag);
+        for (Map.Entry<String, String> entry : keys.entrySet()) {
+            sb.append(" ").append(entry.getKey())
+                    .append(" =\"")
+                    .append(entry.getValue())
+                    .append("\"");
+        }
+        sb.append(">").append(!tag.matches(inlineTags) ? "\n" : "");
         Iterator<HTMLElement> i = elements.iterator();
         while(i.hasNext()) {
-            toReturn = toReturn + i.next().toString() + (!tag.matches(inlineTags) ? "\n" : "");
+            sb.append(i.next().toString() + (!tag.matches(inlineTags) ? "\n" : ""));
         }
-        return "<" + tag + ">" + toReturn + "</" + tag + ">";
+        sb.append("</").append(tag).append(">");
+        return sb.toString();
     }
 
     @Override

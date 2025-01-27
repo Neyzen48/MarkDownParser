@@ -177,8 +177,8 @@ public class MDParser {
                 // Parse link
                 matcher = lnkPattern.matcher(group);
                 if(matcher.find()) {
-                    HTMLElement a = new HTMLElement("a", matcher.group(2));
-                    a.setKey("href", matcher.group(1));
+                    HTMLElement a = new HTMLElement("a", matcher.group(1));
+                    a.setKey("href", matcher.group(2));
                     text.add(a);
                     lastEnd = inlineMatcher.end();
                     continue;
@@ -187,8 +187,8 @@ public class MDParser {
                 // Parse image
                 matcher = imgPattern.matcher(group);
                 if(matcher.find()) {
-                    HTMLElement img = new HTMLElement("img", matcher.group(2));
-                    img.setKey("src", matcher.group(1));
+                    HTMLElement img = new HTMLElement("img", matcher.group(1));
+                    img.setKey("src", matcher.group(2));
                     text.add(img);
                     lastEnd = inlineMatcher.end();
                     continue;
