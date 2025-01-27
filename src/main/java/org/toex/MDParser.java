@@ -169,7 +169,7 @@ public class MDParser {
                 // Parse italic
                 matcher = itlPattern.matcher(group);
                 if(matcher.find()) { // if found group is italic
-                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))).add(new HTMLElement("em", matcher.group(1)));
+                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()+1))).add(new HTMLElement("em", matcher.group(1)));
                     lastEnd = inlineMatcher.end();
                     continue;
                 }
