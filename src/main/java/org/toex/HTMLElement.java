@@ -1,13 +1,16 @@
 package org.toex;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 
 public class HTMLElement implements Iterable{
     HTMLElement parent;
     String tag;
     String data;
     ArrayList<HTMLElement> elements = new ArrayList<>();
+    Map<String, String> keys = new HashMap<>();
 
     public HTMLElement(String tag, HTMLElement... elements) {
         this.tag = tag;
@@ -31,16 +34,25 @@ public class HTMLElement implements Iterable{
         this.elements.add(new HTMLElement(data));
     }
 
-    public void add(HTMLElement e) throws Exception {
+    public HTMLElement add(HTMLElement e) throws Exception {
         if(data != null) {
             throw new Exception("Diese HTML-Element enthält schon ein Data.");
         }
         e.parent = this;
         elements.add(e);
+        return this;
     }
 
     public HTMLElement getParent() {
         return parent;
+    }
+
+    public String getKey(String key) {
+        return keys.get(key);
+    }
+
+    public void setKey(String key, String value) {
+        keys.put(key, value);
     }
 
     @Override

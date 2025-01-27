@@ -2,22 +2,28 @@ package org.toex;
 
 import java.util.Arrays;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.ListIterator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class MDParser {
 
-    private final Pattern hPattern = Pattern.compile("^(\\s{0,3}#+) +(.*)");
-    private final Pattern olPattern = Pattern.compile("^ {0,3}(\\d). (.*)");
-    private final Pattern ulPattern = Pattern.compile("^ {0,3}([-+*]) (.*)"); //
-    private final Pattern tb1Pattern = Pattern.compile("(?m)^( {0,3}-+ *)(?!.)");
-    private final Pattern boldPattern = Pattern.compile(""); // TO DO
-
+    private final Pattern hdrPattern = Pattern.compile("^( {0,3}#{1,6}) +(.*)");
+    private final Pattern oliPattern = Pattern.compile("^ *(\\d)[.)] (.*)");
+    private final Pattern uliPattern = Pattern.compile("^ *([-+*]) (.*)"); //
+    private final Pattern tb1Pattern = Pattern.compile("(?m)^( {0,3}-= *)(?!.)");
+    private final Pattern bldPattern = Pattern.compile("[*]{2}(\\w*[ ]*\\w*)[*]{2}|[_]{2}(\\w*[ ]*\\w*)[_]{2}"); // TO DO
+    private final Pattern itlPattern = Pattern.compile(""); // TO DO
+    private final Pattern lnkPattern = Pattern.compile(""); // TO DO
+    private final Pattern imgPattern = Pattern.compile(""); // TO DO
+    private final Pattern quoPattern = Pattern.compile(""); // TO DO
     private final Pattern doubleNLPattern = Pattern.compile("(?m)(\\s*\\n){2,}");
     private final Pattern continuePattern = Pattern.compile("(?m)^(?!`{3})(.+)\\n(?!\\s*[\\-#*+]\\s)(?!\\s*\\d[.)]\\s)(?!\\s*>)(?!`{3})(.+)"); // Tested
     private final Pattern blockCodePattern = Pattern.compile("(?m)^ {0,3}`{3} *(.*)\\n((?:.*|\\n)+)\\n {0,3}`{3,}"); // Tested
+
+    private Pattern[] inlinePatterns = {
+            bldPattern, itlPattern, lnkPattern, imgPattern
+    };
 
     int inList = 0;
 
@@ -71,7 +77,7 @@ public class MDParser {
 
     public boolean parseOL(HTMLElement html, ListIterator<String> i, int parentIndent, int indent) {
         String line = i.next();
-        Matcher olMatcher = olPattern.matcher(line);
+        Matcher olMatcher = oliPattern.matcher(line);
         if (olMatcher.find()) {
             HTMLElement currentTree = html;
             if(inList == 0 || olMatcher.start(1) >= parentIndent+indent + 3) {
@@ -102,7 +108,7 @@ public class MDParser {
 
     public boolean parseUL(HTMLElement html, ListIterator<String> i, int parentIndent, int indent) {
         String line = i.next();
-        Matcher ulMatcher = ulPattern.matcher(line);
+        Matcher ulMatcher = uliPattern.matcher(line);
         if (ulMatcher.find()) {
             HTMLElement currentTree = html;
             if(inList == 0 || ulMatcher.start(1) >= parentIndent+indent + 2) {
@@ -132,20 +138,77 @@ public class MDParser {
         return false;
     }
 
+    private Pattern inlinePatterns() {
+        StringBuilder inlineRegex = new StringBuilder();
+        for(Pattern inlinePattern : inlinePatterns) {
+            inlineRegex.append(inlinePattern.pattern());
+        }
+        return Pattern.compile(inlineRegex.toString());
+    }
+
     private void parseParagraph(HTMLElement html, ListIterator<String> i) {
         String line = i.next();
+        Matcher imgMatcher = imgPattern.matcher(line);
+        Matcher inlineMatcher = inlinePatterns().matcher(line);
+
+//        HTMLElement textContent = new HTMLElement(line);
+        HTMLElement text = new HTMLElement((inList > 0) ? "li" : "p", (HTMLElement) null);
+        int lastEnd = 0;
+        while (inlineMatcher.find()) {
+            String group = inlineMatcher.group(0);
+            try {
+                // Parse bold
+                Matcher matcher = bldPattern.matcher(group);
+                if(matcher.find()) { // if found group is bold
+                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))).add(new HTMLElement("strong", matcher.group(1)));
+                    continue;
+                }
+
+                // Parse italic
+                matcher = itlPattern.matcher(group);
+                if(matcher.find()) { // if found group is italic
+                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))).add(new HTMLElement("italic", matcher.group(1)));
+                    continue;
+                }
+
+                // Parse link
+                matcher = lnkPattern.matcher(group);
+                if(matcher.find()) {
+                    HTMLElement a = new HTMLElement("a", matcher.group(2));
+                    a.setKey("href", matcher.group(1));
+                    text.add(a);
+                    continue;
+                }
+
+                // Parse image
+                matcher = imgPattern.matcher(group);
+                if(matcher.find()) {
+                    HTMLElement img = new HTMLElement("img", matcher.group(2));
+                    img.setKey("src", matcher.group(1));
+                    text.add(img);
+                    continue;
+                }
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+
+
         try {
-            HTMLElement textContent = new HTMLElement(line + " (" + inList+")");
-            HTMLElement text = new HTMLElement((inList > 0) ? "li" : "p", textContent);
             html.add(text);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
+    private void parseWords(HTMLElement html, ListIterator<String> i) {
+
+    }
+
     private boolean parseHeader(HTMLElement html, ListIterator<String> i) {
         String text = i.next(); // get next line
-        Matcher hMatcher = hPattern.matcher(text); // initializes the header matcher for md line
+        Matcher hMatcher = hdrPattern.matcher(text); // initializes the header matcher for md line
         if(hMatcher.find()) { // if given line is a header
             try {
                 HTMLElement h = new HTMLElement("h" + hMatcher.group(1).length(), hMatcher.group(2)); // initializes header html element
