@@ -60,11 +60,11 @@ public class HTMLElement implements Iterable{
         if(elements.isEmpty()) {
             return data;
         }
-
-        String toReturn = (!tag.matches("(p|h\\d|strong|span)") ? "\n" : "");
+        String inlineTags = "(p|h\\d|strong|span|em|i|title|a|img)";
+        String toReturn = (!tag.matches(inlineTags) ? "\n" : "");
         Iterator<HTMLElement> i = elements.iterator();
         while(i.hasNext()) {
-            toReturn = toReturn + i.next().toString() + (!tag.matches("(p|h\\d)") ? "\n" : "");
+            toReturn = toReturn + i.next().toString() + (!tag.matches(inlineTags) ? "\n" : "");
         }
         return "<" + tag + ">" + toReturn + "</" + tag + ">";
     }

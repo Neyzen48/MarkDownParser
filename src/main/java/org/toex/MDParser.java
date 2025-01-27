@@ -1,8 +1,10 @@
 package org.toex;
 
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.ListIterator;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -12,13 +14,13 @@ public class MDParser {
     private final Pattern oliPattern = Pattern.compile("^ *(\\d)[.)] (.*)");
     private final Pattern uliPattern = Pattern.compile("^ *([-+*]) (.*)"); //
     private final Pattern tb1Pattern = Pattern.compile("(?m)^( {0,3}-= *)(?!.)");
-    private final Pattern bldPattern = Pattern.compile("[*]{2}(\\w*[ ]*\\w*)[*]{2}|[_]{2}(\\w*[ ]*\\w*)[_]{2}"); // TO DO
-    private final Pattern itlPattern = Pattern.compile(""); // TO DO
-    private final Pattern lnkPattern = Pattern.compile(""); // TO DO
-    private final Pattern imgPattern = Pattern.compile(""); // TO DO
+    private final Pattern bldPattern = Pattern.compile("\\*{2}([^ ].+?[^ ])\\*{2}"); // TO DO
+    private final Pattern itlPattern = Pattern.compile("[^\\*]\\*([^\\*].+?[^\\*])\\*[^\\*]"); // TO DO
+    private final Pattern lnkPattern = Pattern.compile("[^!]\\[(.*?)\\]\\((.*?)\\)"); // TO DO
+    private final Pattern imgPattern = Pattern.compile("\\!\\[(.*?)\\]\\((.*?)\\)"); // TO DO
     private final Pattern quoPattern = Pattern.compile(""); // TO DO
     private final Pattern doubleNLPattern = Pattern.compile("(?m)(\\s*\\n){2,}");
-    private final Pattern continuePattern = Pattern.compile("(?m)^(?!`{3})(.+)\\n(?!\\s*[\\-#*+]\\s)(?!\\s*\\d[.)]\\s)(?!\\s*>)(?!`{3})(.+)"); // Tested
+    private final Pattern continuePattern = Pattern.compile("(?m)^(?!`{3})(?!\\s*#{1,6}\\s)(.+)\\n(?!\\s*(?:[\\-*+]|\\#{1,6})\\s)(?!\\s*\\d[.)]\\s)(?!\\s*>)(?!`{3})(.+)"); // Tested
     private final Pattern blockCodePattern = Pattern.compile("(?m)^ {0,3}`{3} *(.*)\\n((?:.*|\\n)+)\\n {0,3}`{3,}"); // Tested
 
     private Pattern[] inlinePatterns = {
@@ -122,7 +124,6 @@ public class MDParser {
                 }
                 inList++;
             } else if(ulMatcher.start(1) < parentIndent + 2) {
-                System.out.println("here");
                 currentTree = currentTree.getParent();
                 indent = 0;
                 inList--;
@@ -140,18 +141,18 @@ public class MDParser {
 
     private Pattern inlinePatterns() {
         StringBuilder inlineRegex = new StringBuilder();
-        for(Pattern inlinePattern : inlinePatterns) {
-            inlineRegex.append(inlinePattern.pattern());
+        Predicate<Pattern> isNotEmpty = s -> !(s.pattern().isEmpty());
+        Iterator<Pattern> i = Arrays.stream(inlinePatterns).filter(isNotEmpty).iterator();
+        while(i.hasNext()) {
+            String pattern =  i.next().pattern();
+            inlineRegex.append(pattern+(i.hasNext()?"|":""));
         }
         return Pattern.compile(inlineRegex.toString());
     }
 
     private void parseParagraph(HTMLElement html, ListIterator<String> i) {
         String line = i.next();
-        Matcher imgMatcher = imgPattern.matcher(line);
         Matcher inlineMatcher = inlinePatterns().matcher(line);
-
-//        HTMLElement textContent = new HTMLElement(line);
         HTMLElement text = new HTMLElement((inList > 0) ? "li" : "p", (HTMLElement) null);
         int lastEnd = 0;
         while (inlineMatcher.find()) {
@@ -161,13 +162,15 @@ public class MDParser {
                 Matcher matcher = bldPattern.matcher(group);
                 if(matcher.find()) { // if found group is bold
                     text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))).add(new HTMLElement("strong", matcher.group(1)));
+                    lastEnd = inlineMatcher.end();
                     continue;
                 }
 
                 // Parse italic
                 matcher = itlPattern.matcher(group);
                 if(matcher.find()) { // if found group is italic
-                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))).add(new HTMLElement("italic", matcher.group(1)));
+                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))).add(new HTMLElement("em", matcher.group(1)));
+                    lastEnd = inlineMatcher.end();
                     continue;
                 }
 
@@ -177,6 +180,7 @@ public class MDParser {
                     HTMLElement a = new HTMLElement("a", matcher.group(2));
                     a.setKey("href", matcher.group(1));
                     text.add(a);
+                    lastEnd = inlineMatcher.end();
                     continue;
                 }
 
@@ -186,16 +190,15 @@ public class MDParser {
                     HTMLElement img = new HTMLElement("img", matcher.group(2));
                     img.setKey("src", matcher.group(1));
                     text.add(img);
+                    lastEnd = inlineMatcher.end();
                     continue;
                 }
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
         }
-
-
-
         try {
+            text.add(new HTMLElement(line.substring(lastEnd)));
             html.add(text);
         } catch (Exception e) {
             throw new RuntimeException(e);
