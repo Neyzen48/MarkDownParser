@@ -82,7 +82,9 @@ public class HTMLElement implements Iterable{
         if(tag == null) {
             return " ".repeat(indent) + data;
         }
-
+        if (tag.matches("code")) {
+            nextIndent = 0;
+        }
         sb.append(" ".repeat(indent)).append("<").append(tag);
 
         // add keys and values
