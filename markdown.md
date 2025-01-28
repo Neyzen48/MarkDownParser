@@ -1,5 +1,5 @@
 # Markdown Documentation Example
-Markdown is a lightweight markup language used to create formatted text using a plain-text editor. It’s easy to learn and widely used in documentation, wikis, and more.
+Markdown is a lightweight markup language used to create formatted text using a plain-text editor. It’s easy to learn and widely used in documentation, wikis, and more. **~~Old Text~~**
 
 ## Features of Markdown
 ### Lists

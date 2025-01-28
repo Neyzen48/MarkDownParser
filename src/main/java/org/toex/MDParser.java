@@ -9,7 +9,6 @@ public class MDParser {
     private final Pattern hdrPattern = Pattern.compile("^( {0,3}#{1,6}) +(.*)"); // Pattern to identify Markdown headers with different levels
     private final Pattern oliPattern = Pattern.compile("^ *(\\d)[.)] (.*)"); // Pattern to identify ordered list items in Markdown
     private final Pattern uliPattern = Pattern.compile("^ *([-+*]) (.*)"); // Pattern to identify unordered list items in Markdown
-    private final Pattern tb1Pattern = Pattern.compile("(?m)^( {0,3}-= *)(?!.)"); // Pattern to identify horizontal lines
     private final Pattern bdiPattern = Pattern.compile("(\\*+)(.*?)\\1"); // Pattern to identify bold and italic text in Markdown
     private final Pattern strPattern = Pattern.compile("(~{2})(.*?)(~{2})"); // Pattern to identify bold and italic text in Markdown
     private final Pattern lnkPattern = Pattern.compile("(?<!!)\\[(.*?)\\]\\((.*?)\\)"); // Pattern to identify links in Markdown
@@ -33,29 +32,25 @@ public class MDParser {
         return doubleNLPattern.matcher(mdText).replaceAll("\n"); // removes all empty lines and returns it back
     }
 
-    private String precompile(String mdText) { // Tested
+    private String precompile(String md) { // Tested
         StringBuilder markdown = new StringBuilder(); // string builder for markdown simplify process
-        Matcher blockCodeMatcher = blockCodePattern.matcher(mdText); // matcher for code block
+        Matcher blockCodeMatcher = blockCodePattern.matcher(md); // matcher for code block
         int lastEnd = 0; // last string position of code block
         while(blockCodeMatcher.find()) { // find code blocks
-            markdown.append(mergeLines(mdText.substring(lastEnd, blockCodeMatcher.start()))) // change code blocks and adds them into new markdown
+            markdown.append(mergeLines(md.substring(lastEnd, blockCodeMatcher.start()))) // change code blocks and adds them into new markdown
                     .append(blockCodeMatcher.group()); // don't change code blocks and adds them into new markdown
             lastEnd = blockCodeMatcher.end(); // reset last end position of code block
         }
-        return markdown.append(mergeLines(mdText.substring(lastEnd))).toString(); // add left markdown after code block and return it back
+        return markdown.append(mergeLines(md.substring(lastEnd))).toString(); // add left markdown after code block and return it back
     }
 
     public HTMLElement compile(String md) { // Tested
         HTMLElement html = new HTMLElement(); // creates a new html tree
         String precompiledMarkdown = precompile(md); // run precompiler to get rid of empty lines and merge continuously paragraphs
-        parseMarkdown(html, precompiledMarkdown); // Starts to parse, html tree will be built
-        return html; // returns built tree back to
-    }
-
-    private void parseMarkdown(HTMLElement html, String md) {
-        LinkedList<String> lines = new LinkedList<>(Arrays.asList(md.split("\n"))); // separates markdown into lines
+        LinkedList<String> lines = new LinkedList<>(Arrays.asList(precompiledMarkdown.split("\n"))); // separates markdown into lines
         ListIterator<String> lineIterator = lines.listIterator(); // initializes iterator to iterate between lines
         parseMarkdown(html, lineIterator, 0); // calls recursive version of this parser function to build html
+        return html; // returns built tree back to
     }
 
     private void parseMarkdown(HTMLElement html, ListIterator<String> i, int indent) {
@@ -203,70 +198,105 @@ public class MDParser {
         return Pattern.compile(inlineRegex.toString()); // return the compiled regex for inline patterns
     }
 
+    private boolean parseBoldItalic(HTMLElement html, String text) {
+        Matcher matcher = bdiPattern.matcher(text);
+        if(matcher.find()) {
+            int starCount = matcher.group(1).length();
+            try {
+                if (starCount % 2 == 1) {
+                    if(starCount > 1) {
+                        html.add(new HTMLElement("em", new HTMLElement("strong", matcher.group(2).trim())));
+                    } else {
+                        html.add(new HTMLElement("em", matcher.group(2).trim()));
+                    }
+                } else if(starCount % 2 == 0){
+                    html.add(new HTMLElement("strong", matcher.group(2).trim()));
+                }
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private boolean parseStriketrough(HTMLElement html, String text) {
+        Matcher matcher = strPattern.matcher(text);
+        if(matcher.find()) {
+            try {
+                html.add(new HTMLElement("s", matcher.group(2).trim()));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private boolean parseCode(HTMLElement html, String text) {
+        Matcher matcher = codePattern.matcher(text);
+        if(matcher.find()) {
+            try {
+                html.add(new HTMLElement("code", matcher.group(1)));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private boolean parseLink(HTMLElement html, String text) {
+        Matcher matcher = lnkPattern.matcher(text); // check for links
+        if(matcher.find()) { // if a link is found
+            HTMLElement a = new HTMLElement("a", matcher.group(1)); // create an anchor element with link text
+            a.addKey("href", matcher.group(2)); // add the href attribute with the link URL
+            try {
+                html.add(a); // add the link element to the text
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private boolean parseImage(HTMLElement html, String text) {
+        Matcher matcher = imgPattern.matcher(text); // check for images
+        if(matcher.find()) { // if an image is found
+            HTMLElement img = new HTMLElement("img", (HTMLElement) null); // create an image element
+            img.addKey("src", matcher.group(2)); // add the src attribute with the image URL
+            img.addKey("alt", matcher.group(1)); // add the alt attribute with the image description
+            try {
+                html.add(img); // add the image element to the text
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            return true;
+        }
+        return false;
+    }
+
     private void parseParagraph(HTMLElement html, ListIterator<String> i) {
         String line = i.next().trim(); // get the current line
         Matcher inlineMatcher = inlinePatterns().matcher(line); // match the line with inline patterns
         HTMLElement text = new HTMLElement((inList > 0) ? "li" : "p", (HTMLElement) null); // create a list item or paragraph element based on context
         int lastEnd = 0; // track the last match's end position
-        while (inlineMatcher.find()) { // iterate through all inline matches
-            String group = inlineMatcher.group(0); // get the matched group
-            try {
-                Matcher matcher = codePattern.matcher(group);
-                if(matcher.find()) { // if bold text is found
-                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))) // add the text before the bold match
-                            .add(new HTMLElement("code", matcher.group(1))); // add the bold text
-                    lastEnd = inlineMatcher.end(); // update the last match's end position
-                    continue; // move to the next match
-                }
-
-                matcher = bdiPattern.matcher(group); // check for bold text
-                if(matcher.find()) { // if bold text is found
-                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))); // add the text before the bold match
-                    int starCount = matcher.group(1).length();
-                    if (starCount % 2 == 1) {
-                        if(starCount > 1) {
-                            text.add(new HTMLElement("em", new HTMLElement("strong", matcher.group(2).trim()))); // add the italic and bold text
-                        } else {
-                            text.add(new HTMLElement("em", matcher.group(2).trim())); // add the italic text
-                        }
-                    } else if(starCount % 2 == 0){
-                        text.add(new HTMLElement("strong", matcher.group(2).trim())); // add the bold text
-                    }
-                    lastEnd = inlineMatcher.end(); // update the last match's end position
-                    continue; // move to the next match
-                }
-                
-                matcher = strPattern.matcher(group); // check for strike text
-                if(matcher.find()) { // if strike text is found
-                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))) // add the text before the strike match
-                            .add(new HTMLElement("s", matcher.group(2).trim())); // add the strike text
-                    lastEnd = inlineMatcher.end(); // update the last match's end position
-                    continue; // move to the next match
-                }
-
-                matcher = lnkPattern.matcher(group); // check for links
-                if(matcher.find()) { // if a link is found
-                    HTMLElement a = new HTMLElement("a", matcher.group(1)); // create an anchor element with link text
-                    a.addKey("href", matcher.group(2)); // add the href attribute with the link URL
-                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))).add(a); // add the link element to the text
-                    lastEnd = inlineMatcher.end(); // update the last match's end position
-                    continue; // move to the next match
-                }
-
-                matcher = imgPattern.matcher(group); // check for images
-                if(matcher.find()) { // if an image is found
-                    HTMLElement img = new HTMLElement("img", (HTMLElement) null); // create an image element
-                    img.addKey("src", matcher.group(2)); // add the src attribute with the image URL
-                    img.addKey("alt", matcher.group(1)); // add the alt attribute with the image description
-                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))).add(img); // add the image element to the text
-                    lastEnd = inlineMatcher.end(); // update the last match's end position
-                    continue; // move to the next match
-                }
-            } catch (Exception e) {
-                throw new RuntimeException(e); // handle exceptions
-            }
-        }
         try {
+            while (inlineMatcher.find()) { // iterate through all inline matches
+                String group = inlineMatcher.group(0); // get the matched group
+                text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))); // add the text before the bold match
+                if(
+                    parseCode(text, group) ||
+                    parseBoldItalic(text, group) ||
+                    parseStriketrough(text, group) ||
+                    parseImage(text, group) ||
+                    parseLink(text, group) ||
+                    parseImage(text, group)
+                ) {
+                    lastEnd = inlineMatcher.end(); // update the last match's end position
+                }
+            }
             text.add(new HTMLElement(line.substring(lastEnd))); // add any remaining text after the last inline match
             html.add(text); // add the paragraph or list item to the HTML tree
         } catch (Exception e) {
@@ -285,16 +315,6 @@ public class MDParser {
                 throw new RuntimeException(e);
             }
             return true; // return true to markdownParser() function back
-        } else if(i.hasNext()) { // if no header is found
-            if(tb1Pattern.matcher(i.next()).find()) { // then look if the next line contains horizontal line
-                try {
-                    html.add(new HTMLElement("h1", text.trim())); // add header into html tree
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
-                return true;
-            }
-            i.previous(); // if no header with horizontal line is found then go to previous line
         }
         i.previous(); // if no header with # found then go to previous line
         return false;
