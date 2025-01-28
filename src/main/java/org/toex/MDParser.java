@@ -1,24 +1,20 @@
 package org.toex;
 
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.ListIterator;
+import java.util.*;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class MDParser {
-
     private final Pattern hdrPattern = Pattern.compile("^( {0,3}#{1,6}) +(.*)");
     private final Pattern oliPattern = Pattern.compile("^ *(\\d)[.)] (.*)");
     private final Pattern uliPattern = Pattern.compile("^ *([-+*]) (.*)"); //
     private final Pattern tb1Pattern = Pattern.compile("(?m)^( {0,3}-= *)(?!.)");
     private final Pattern bldPattern = Pattern.compile("\\*{2}([^ ].+?[^ ])\\*{2}"); // TO DO
-    private final Pattern itlPattern = Pattern.compile("[^\\*]\\*([^\\*].+?[^\\*])\\*[^\\*]"); // TO DO
-    private final Pattern lnkPattern = Pattern.compile("[^!]\\[(.*?)\\]\\((.*?)\\)"); // TO DO
-    private final Pattern imgPattern = Pattern.compile("\\!\\[(.*?)\\]\\((.*?)\\)"); // TO DO
-    private final Pattern quoPattern = Pattern.compile(""); // TO DO
+    private final Pattern itlPattern = Pattern.compile("[^*]\\*([^*].+?[^*])\\*[^*]"); // TO DO
+    private final Pattern lnkPattern = Pattern.compile("[^!]\\[(.*?)]\\((.*?)\\)"); // TO DO
+    private final Pattern imgPattern = Pattern.compile("!\\[(.*?)]\\((.*?)\\)"); // TO DO
+    private final Pattern quoPattern = Pattern.compile("^> (.*)"); // TO DO
     private final Pattern doubleNLPattern = Pattern.compile("(?m)(\\s*\\n){2,}");
     private final Pattern continuePattern = Pattern.compile("(?m)^(?!`{3})(?!\\s*#{1,6}\\s)(.+)\\n(?!\\s*(?:[\\-*+]|\\#{1,6})\\s)(?!\\s*\\d[.)]\\s)(?!\\s*>)(?!`{3})(.+)"); // Tested
     private final Pattern blockCodePattern = Pattern.compile("(?m)^ {0,3}`{3} *(.*)\\n((?:.*|\\n)+)\\n {0,3}`{3,}"); // Tested
@@ -29,7 +25,6 @@ public class MDParser {
 
     int inList = 0;
 
-
     private String mergeLines(String mdText) { // Tested
         while(continuePattern.matcher(mdText).find()) { // finds any line that is not a new paragraph
             mdText = continuePattern.matcher(mdText).replaceFirst("$1 $2"); // and merges them, hope not merging something it shouldn't
@@ -38,7 +33,6 @@ public class MDParser {
     }
 
     private String precompile(String mdText) { // Tested
-        System.out.println(mdText); // DEBUG CODE
         StringBuilder markdown = new StringBuilder(); // string builder for markdown simplify process
         Matcher blockCodeMatcher = blockCodePattern.matcher(mdText); // matcher for code block
         int lastEnd = 0; // last string position of code block
@@ -53,9 +47,6 @@ public class MDParser {
     public HTMLElement compile(String md) { // Tested
         HTMLElement html = new HTMLElement(); // creates a new html tree
         String precompiledMarkdown = precompile(md); // run precompiler to get rid of empty lines and merge continuously paragraphs
-        System.out.println("\n----------------------------------------------------------------\n"); // DEBUG CODE
-        System.out.println(precompiledMarkdown); // DEBUG CODE
-        System.out.println("\n----------------------------------------------------------------\n"); // DEBUG CODE
         parseMarkdown(html, precompiledMarkdown);  // Starts to parse, html tree will be built
         return html; // returns built tree back to
     }
@@ -68,7 +59,7 @@ public class MDParser {
 
     private void parseMarkdown(HTMLElement html, ListIterator<String> i, int indent) {
         if(i.hasNext()) {
-            if(parseHeader(html, i) || parseOL(html, i, 0, indent) || parseUL(html, i, 0, indent)) {
+            if(parseHeader(html, i) || parseQuote(html, i) ||parseOL(html, i, 0, indent) || parseUL(html, i, 0, indent)) {
                 parseMarkdown(html, i, indent); // if something parsed then continue to parse next lines
             } else parseParagraph(html, i);
             if (inList == 0) {
@@ -77,7 +68,38 @@ public class MDParser {
         }
     }
 
-    public boolean parseOL(HTMLElement html, ListIterator<String> i, int parentIndent, int indent) {
+    private boolean parseQuote(HTMLElement html, ListIterator<String> i) {
+        String line = i.next();
+        Matcher quoMatcher = quoPattern.matcher(line);
+        if(quoMatcher.find()) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(quoMatcher.group(1)).append("\n");
+            quoMatcher.group();
+            while(i.hasNext()) {
+                String quoLine = i.next();
+                quoMatcher = quoPattern.matcher(quoLine);
+                if(quoMatcher.find()) {
+                    sb.append(quoMatcher.group(1)).append("\n");
+                } else {
+                    System.out.println("test");
+                    HTMLElement quote = compile(sb.toString());
+                    quote.setTag("blockquote");
+                    try {
+                        html.add(quote);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                    break;
+                }
+            }
+            i.previous();
+            return true;
+        }
+        i.previous();
+        return false;
+    }
+
+    private boolean parseOL(HTMLElement html, ListIterator<String> i, int parentIndent, int indent) {
         String line = i.next();
         Matcher olMatcher = oliPattern.matcher(line);
         if (olMatcher.find()) {
@@ -108,7 +130,7 @@ public class MDParser {
         return false;
     }
 
-    public boolean parseUL(HTMLElement html, ListIterator<String> i, int parentIndent, int indent) {
+    private boolean parseUL(HTMLElement html, ListIterator<String> i, int parentIndent, int indent) {
         String line = i.next();
         Matcher ulMatcher = uliPattern.matcher(line);
         if (ulMatcher.find()) {
@@ -178,7 +200,7 @@ public class MDParser {
                 matcher = lnkPattern.matcher(group);
                 if(matcher.find()) {
                     HTMLElement a = new HTMLElement("a", matcher.group(1));
-                    a.setKey("href", matcher.group(2));
+                    a.addKey("href", matcher.group(2));
                     text.add(a);
                     lastEnd = inlineMatcher.end();
                     continue;
@@ -187,8 +209,9 @@ public class MDParser {
                 // Parse image
                 matcher = imgPattern.matcher(group);
                 if(matcher.find()) {
-                    HTMLElement img = new HTMLElement("img", matcher.group(1));
-                    img.setKey("src", matcher.group(2));
+                    HTMLElement img = new HTMLElement("img", (HTMLElement) null);
+                    img.addKey("src", matcher.group(2));
+                    img.addKey("alt", matcher.group(1));
                     text.add(img);
                     lastEnd = inlineMatcher.end();
                     continue;
@@ -203,10 +226,6 @@ public class MDParser {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-    }
-
-    private void parseWords(HTMLElement html, ListIterator<String> i) {
-
     }
 
     private boolean parseHeader(HTMLElement html, ListIterator<String> i) {

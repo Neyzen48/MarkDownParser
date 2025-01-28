@@ -49,6 +49,6 @@ public class Main {
     public static void main(String[] args) {
         MDParser parser = new MDParser();
         HTMLElement html = parser.compile(testMarkdown);
-        System.out.println(html);
+        System.out.println(html.createDocument());
     }
 }
