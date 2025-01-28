@@ -1,6 +1,7 @@
 package org.toex;
 
 import java.util.*;
+import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -22,6 +23,14 @@ public class MDParser {
     private Pattern[] inlinePatterns = { // Array of inline patterns used for parsing inline Markdown elements
             bdiPattern, strPattern, lnkPattern, imgPattern, codePattern,
     };
+
+    private List<BiFunction<HTMLElement, String, Boolean>> inlineParsers = Arrays.asList(
+            this::parseCode,
+            this::parseBoldItalic,
+            this::parseStriketrough,
+            this::parseImage,
+            this::parseLink
+    );
 
     int inList = 0; // Tracks the current depth of list nesting
 
@@ -286,14 +295,8 @@ public class MDParser {
             while (inlineMatcher.find()) { // iterate through all inline matches
                 String group = inlineMatcher.group(0); // get the matched group
                 text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))); // add the text before the bold match
-                if(
-                    parseCode(text, group) ||
-                    parseBoldItalic(text, group) ||
-                    parseStriketrough(text, group) ||
-                    parseImage(text, group) ||
-                    parseLink(text, group) ||
-                    parseImage(text, group)
-                ) {
+                boolean parsed = inlineParsers.stream().anyMatch(parser -> parser.apply(text, group));
+                if (parsed) {
                     lastEnd = inlineMatcher.end(); // update the last match's end position
                 }
             }
