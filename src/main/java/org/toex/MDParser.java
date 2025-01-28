@@ -25,7 +25,7 @@ public class MDParser {
     };
 
     private List<BiFunction<HTMLElement, String, Boolean>> inlineParsers = Arrays.asList(
-            this::parseBlockCode,
+            this::parseCode,
             this::parseBoldItalic,
             this::parseStriketrough,
             this::parseImage,
@@ -242,7 +242,7 @@ public class MDParser {
         return false;
     }
 
-    private boolean parseBlockCode(HTMLElement html, String text) {
+    private boolean parseCode(HTMLElement html, String text) {
         Matcher matcher = codePattern.matcher(text);
         if(matcher.find()) {
             try {
