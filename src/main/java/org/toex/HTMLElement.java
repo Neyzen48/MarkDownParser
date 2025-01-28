@@ -1,5 +1,6 @@
 package org.toex;
 
+import javax.swing.text.html.HTML;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -8,7 +9,7 @@ import java.util.Map;
 public class HTMLElement implements Iterable{
 
     private static final String SINGLE_TAGS = "(area|base|col|emberd|hr|img|input|keygen|link|meta|param|source|track|wbr)";
-    private static final String INLINE_TAGS = "(p|h\\d|strong|span|em|i|title|a)" + ("|") +  SINGLE_TAGS;
+    private static final String INLINE_TAGS = "(p|li|h\\d|strong|span|em|i|title|a|code)" + ("|") +  SINGLE_TAGS;
 
 
     HTMLElement parent;
@@ -65,7 +66,11 @@ public class HTMLElement implements Iterable{
         HTMLElement meta = new HTMLElement("meta", (HTMLElement) null);
         meta.addKey("charset", "UTF-8");
         HTMLElement title = new HTMLElement("title", "Title");
-        HTMLElement head = new HTMLElement("head", meta, title);
+        HTMLElement link = new HTMLElement("link", (HTMLElement) null);
+        link.addKey("rel", "stylesheet");
+        link.addKey("type", "text/css");
+        link.addKey("href", "style.css");
+        HTMLElement head = new HTMLElement("head", meta, title, link);
         HTMLElement body = new HTMLElement("body", this);
         HTMLElement html = new HTMLElement("html", head, body);
         html.addKey("lang", "en");
@@ -82,7 +87,7 @@ public class HTMLElement implements Iterable{
         if(tag == null) {
             return " ".repeat(indent) + data;
         }
-        if (tag.matches("code")) {
+        if (tag.matches("pre")) {
             nextIndent = 0;
         }
         sb.append(" ".repeat(indent)).append("<").append(tag);

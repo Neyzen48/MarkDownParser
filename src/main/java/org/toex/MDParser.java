@@ -10,17 +10,18 @@ public class MDParser {
     private final Pattern oliPattern = Pattern.compile("^ *(\\d)[.)] (.*)"); // Pattern to identify ordered list items in Markdown
     private final Pattern uliPattern = Pattern.compile("^ *([-+*]) (.*)"); // Pattern to identify unordered list items in Markdown
     private final Pattern tb1Pattern = Pattern.compile("(?m)^( {0,3}-= *)(?!.)"); // Pattern to identify horizontal lines
-    private final Pattern bldPattern = Pattern.compile("\\*{2}([^ ].+?[^ ])\\*{2}"); // Pattern to identify bold text in Markdown
-    private final Pattern itlPattern = Pattern.compile("[^*]\\*([^*].+?[^*])\\*[^*]"); // Pattern to identify italic text in Markdown
-    private final Pattern lnkPattern = Pattern.compile("[^!]\\[(.*?)]\\((.*?)\\)"); // Pattern to identify links in Markdown
+    private final Pattern bdiPattern = Pattern.compile("(\\*+)(.*?)\\1"); // Pattern to identify bold and italic text in Markdown
+    private final Pattern strPattern = Pattern.compile("(~{2})(.*?)(~{2})"); // Pattern to identify bold and italic text in Markdown
+    private final Pattern lnkPattern = Pattern.compile("(?<!!)\\[(.*?)\\]\\((.*?)\\)"); // Pattern to identify links in Markdown
     private final Pattern imgPattern = Pattern.compile("!\\[(.*?)]\\((.*?)\\)"); // Pattern to identify images in Markdown
-    private final Pattern quoPattern = Pattern.compile("^> (.*)"); // Pattern to identify blockquotes in Markdown
+    private final Pattern quoPattern = Pattern.compile("^ {0,4}>(.*)"); // Pattern to identify blockquotes in Markdown
+    private final Pattern codePattern = Pattern.compile("\\`(.*?)\\`");
     private final Pattern doubleNLPattern = Pattern.compile("(?m)(\\s*\\n){2,}"); // Pattern to remove multiple consecutive newlines
     private final Pattern continuePattern = Pattern.compile("(?m)^(?!`{3})(?!\\s*#{1,6}\\s)(.+)\\n(?!\\s*(?:[\\-*+]|\\#{1,6})\\s)(?!\\s*\\d[.)]\\s)(?!\\s*>)(?!`{3})(.+)"); // Pattern to merge lines that belong to the same paragraph
     private final Pattern blockCodePattern = Pattern.compile("(?m)^ {0,3}`{3} *(.*)\\n((?:.*|\\n)+)\\n {0,3}`{3,}"); // Pattern to identify code blocks in Markdown
 
     private Pattern[] inlinePatterns = { // Array of inline patterns used for parsing inline Markdown elements
-            bldPattern, itlPattern, lnkPattern, imgPattern
+            bdiPattern, strPattern, lnkPattern, imgPattern, codePattern,
     };
 
     int inList = 0; // Tracks the current depth of list nesting
@@ -59,7 +60,7 @@ public class MDParser {
 
     private void parseMarkdown(HTMLElement html, ListIterator<String> i, int indent) {
         if(i.hasNext()) {
-            if(parseHeader(html, i) || parseQuote(html, i) || parseCode(html, i) ||parseOL(html, i, 0, indent) || parseUL(html, i, 0, indent)) {
+            if(parseHeader(html, i) || parseQuote(html, i) || parseCode(html, i) || parseOL(html, i, 0, indent) || parseUL(html, i, 0, indent)) {
                 parseMarkdown(html, i, indent); // if something parsed then continue to parse next lines
             } else parseParagraph(html, i); // parse the line as a paragraph if no other pattern matches
             if (inList == 0) {
@@ -73,25 +74,25 @@ public class MDParser {
         Matcher quoMatcher = quoPattern.matcher(line); // match the line with blockquote pattern
         if(quoMatcher.find()) { // if blockquote pattern matches
             StringBuilder sb = new StringBuilder(); // initialize a StringBuilder to accumulate blockquote content
-            sb.append(quoMatcher.group(1)).append("\n"); // append the matched blockquote content
+            sb.append(quoMatcher.group(1)); // append the matched blockquote content
             quoMatcher.group(); // call group to ensure matching
             while(i.hasNext()) {
                 String quoLine = i.next(); // move to the next line
                 quoMatcher = quoPattern.matcher(quoLine); // check if it's still part of the blockquote
                 if(quoMatcher.find()) {
-                    sb.append(quoMatcher.group(1)).append("\n"); // add content to the blockquote
+                    sb.append("\n").append(quoMatcher.group(1)); // add content to the blockquote
                 } else {
-                    HTMLElement quote = compile(sb.toString()); // compile the blockquote content recursively
-                    quote.setTag("blockquote"); // set the tag as blockquote
-                    try {
-                        html.add(quote); // add the blockquote element to the HTML tree
-                    } catch (Exception e) {
-                        throw new RuntimeException(e); // handle runtime exceptions
-                    }
                     break; // exit the loop when blockquote ends
                 }
             }
-            i.previous(); // move back one step after exiting the blockquote
+            HTMLElement quote = compile(sb.toString()); // compile the blockquote content recursively
+            quote.setTag("blockquote"); // set the tag as blockquote
+            try {
+                html.add(quote); // add the blockquote element to the HTML tree
+            } catch (Exception e) {
+                throw new RuntimeException(e); // handle runtime exceptions
+            }
+            if(i.hasNext()) i.previous(); // move back one step after exiting the blockquote
             return true; // indicate a successful match
         }
         i.previous(); // revert iterator if no match found
@@ -100,24 +101,25 @@ public class MDParser {
 
     private boolean parseCode(HTMLElement html, ListIterator<String> i) {
         String line = i.next(); // get the current line
-        if (line.matches("^ {0,4}```(.*)")) {
+
+        if (line.stripTrailing().matches("^ {0,4}```(.*)")) {
             StringBuilder sb = new StringBuilder();
             sb.append(line).append("\n");
             while(i.hasNext()) {
                 String codeLine = i.next();
-                if(codeLine.matches("^ {0,4}```")) {
+                if(codeLine.stripTrailing().matches("^ {0,4}```")) {
                     break;
                 } else {
                     sb.append(codeLine).append("\n");
                 }
             }
             sb.append(line).append("```");
-            Matcher blockCodeMatcher = blockCodePattern.matcher(sb);
+            Matcher blockCodeMatcher = blockCodePattern.matcher(sb.toString().stripIndent());
             if(blockCodeMatcher.find()) {
-                HTMLElement code = new HTMLElement("code", blockCodeMatcher.group(2));
-                code.addKey("class", blockCodeMatcher.group(1));
+                HTMLElement pre = new HTMLElement("pre", blockCodeMatcher.group(2));
+                pre.addKey("class", blockCodeMatcher.group(1));
                 try {
-                    html.add(new HTMLElement("pre", code));
+                    html.add(pre);
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
@@ -174,7 +176,7 @@ public class MDParser {
                     throw new RuntimeException(e); // handle exceptions
                 }
                 inList++; // increment the list nesting level
-            } else if(ulMatcher.start(1) < parentIndent + 2) { // if the list is not nested
+            } else if(inList > 1 && ulMatcher.start(1) < parentIndent + 2) { // if the list is not nested
                 currentTree = currentTree.getParent(); // move to the parent HTML element
                 indent = 0; // reset the indentation
                 inList--; // decrement the list nesting level
@@ -202,26 +204,43 @@ public class MDParser {
     }
 
     private void parseParagraph(HTMLElement html, ListIterator<String> i) {
-        String line = i.next(); // get the current line
+        String line = i.next().trim(); // get the current line
         Matcher inlineMatcher = inlinePatterns().matcher(line); // match the line with inline patterns
         HTMLElement text = new HTMLElement((inList > 0) ? "li" : "p", (HTMLElement) null); // create a list item or paragraph element based on context
         int lastEnd = 0; // track the last match's end position
         while (inlineMatcher.find()) { // iterate through all inline matches
             String group = inlineMatcher.group(0); // get the matched group
             try {
-                Matcher matcher = bldPattern.matcher(group); // check for bold text
+                Matcher matcher = codePattern.matcher(group);
                 if(matcher.find()) { // if bold text is found
                     text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))) // add the text before the bold match
-                            .add(new HTMLElement("strong", matcher.group(1))); // add the bold text
+                            .add(new HTMLElement("code", matcher.group(1))); // add the bold text
                     lastEnd = inlineMatcher.end(); // update the last match's end position
                     continue; // move to the next match
                 }
 
-                matcher = itlPattern.matcher(group); // check for italic text
-                if(matcher.find()) { // if italic text is found
-                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()+1))) // add the text before the italic match
-                            .add(new HTMLElement("em", matcher.group(1))); // add the italic text
-                    lastEnd = inlineMatcher.end()-1; // update the last match's end position
+                matcher = bdiPattern.matcher(group); // check for bold text
+                if(matcher.find()) { // if bold text is found
+                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))); // add the text before the bold match
+                    int starCount = matcher.group(1).length();
+                    if (starCount % 2 == 1) {
+                        if(starCount > 1) {
+                            text.add(new HTMLElement("em", new HTMLElement("strong", matcher.group(2).trim()))); // add the italic and bold text
+                        } else {
+                            text.add(new HTMLElement("em", matcher.group(2).trim())); // add the italic text
+                        }
+                    } else if(starCount % 2 == 0){
+                        text.add(new HTMLElement("strong", matcher.group(2).trim())); // add the bold text
+                    }
+                    lastEnd = inlineMatcher.end(); // update the last match's end position
+                    continue; // move to the next match
+                }
+                
+                matcher = strPattern.matcher(group); // check for strike text
+                if(matcher.find()) { // if strike text is found
+                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))) // add the text before the strike match
+                            .add(new HTMLElement("s", matcher.group(2).trim())); // add the strike text
+                    lastEnd = inlineMatcher.end(); // update the last match's end position
                     continue; // move to the next match
                 }
 
@@ -229,7 +248,7 @@ public class MDParser {
                 if(matcher.find()) { // if a link is found
                     HTMLElement a = new HTMLElement("a", matcher.group(1)); // create an anchor element with link text
                     a.addKey("href", matcher.group(2)); // add the href attribute with the link URL
-                    text.add(a); // add the link element to the text
+                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))).add(a); // add the link element to the text
                     lastEnd = inlineMatcher.end(); // update the last match's end position
                     continue; // move to the next match
                 }
@@ -239,7 +258,7 @@ public class MDParser {
                     HTMLElement img = new HTMLElement("img", (HTMLElement) null); // create an image element
                     img.addKey("src", matcher.group(2)); // add the src attribute with the image URL
                     img.addKey("alt", matcher.group(1)); // add the alt attribute with the image description
-                    text.add(img); // add the image element to the text
+                    text.add(new HTMLElement(line.substring(lastEnd, inlineMatcher.start()))).add(img); // add the image element to the text
                     lastEnd = inlineMatcher.end(); // update the last match's end position
                     continue; // move to the next match
                 }

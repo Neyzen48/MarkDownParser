@@ -4,58 +4,22 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class Main {
-    public static String testMarkdown = """
-            # Header Example
-            
-            This is a paragraph with **strong text** and *italic text*. Markdown is a simple and versatile way to format text for web documents.
-            
-            ## Lists
-            
-            ### Ordered List
-            1. First item
-               1. Sub-item 1
-               2. Sub-item 2
-            2. Second item
-               1. Sub-item 1
-                  1. Sub-sub-item 1
-               2. Sub-item 3   
-            
-            ### Unordered List
-            - First item
-              - Sub-item 1
-              - Sub-item 2
-            - Second item
-              - Sub-item 1
-              - Sub-item 2
-            
-            ## Code Block
-            Here’s an example of a code block:
-            
-            ```javascript
-            function greet(name) {
-                console.log(`Hello, ${name}!`);
-            }
-            greet('World');
-            ```
-            
-            ## Quote
-            > "The only limit to our realization of tomorrow is our doubts of today."
-            > — Franklin D. Roosevelt
-            
-            ## Links and Images
-            Here’s a [link to OpenAI](https://www.openai.com).
-            
-            And here’s an image:
-            ![Markdown Logo](https://markdown-here.com/img/icon256.png)
-            """;
-
     public static void main(String[] args) {
+        String testMarkdown = "";
+        try {
+            Path path = Paths.get("markdown.md");
+            testMarkdown = Files.readString(path); // Reads the entire file content as a String
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         MDParser parser = new MDParser();
         HTMLElement html = parser.compile(testMarkdown);
-        System.out.println(html.createDocument());
-
         String content = html.createDocument();
         String filePath = "test.html";
 
@@ -66,15 +30,10 @@ public class Main {
             if (!file.exists()) {
                 // Create a new file if it doesn't exist
                 file.createNewFile();
-                System.out.println("File created: " + file.getName());
-            } else {
-                System.out.println("File already exists. Updating content.");
             }
-
             // Write to the file (overwriting the existing content)
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
                 writer.write(content);
-                System.out.println("File updated successfully.");
             }
         } catch (IOException e) {
             System.out.println("An error occurred.");
