@@ -20,16 +20,24 @@ public class MDParser {
     private final Pattern continuePattern = Pattern.compile("(?m)^(?!`{3})(?!\\s*#{1,6}\\s)(.+)\\n(?!\\s*(?:[\\-*+]|\\#{1,6})\\s)(?!\\s*\\d[.)]\\s)(?!\\s*>)(?!`{3})(.+)"); // Pattern to merge lines that belong to the same paragraph
     private final Pattern blockCodePattern = Pattern.compile("(?m)^ {0,3}`{3} *(.*)\\n((?:.*|\\n)+)\\n {0,3}`{3,}"); // Pattern to identify code blocks in Markdown
 
-    private Pattern[] inlinePatterns = { // Array of inline patterns used for parsing inline Markdown elements
+    private final Pattern[] inlinePatterns = { // Array of inline patterns used for parsing inline Markdown elements
             bdiPattern, strPattern, lnkPattern, imgPattern, codePattern,
     };
 
-    private List<BiFunction<HTMLElement, String, Boolean>> inlineParsers = Arrays.asList(
+    private final List<BiFunction<HTMLElement, String, Boolean>> inlineParsers = Arrays.asList(
             this::parseCode,
             this::parseBoldItalic,
             this::parseStriketrough,
             this::parseImage,
             this::parseLink
+    );
+
+    private final List<BiFunction<HTMLElement, ListIterator<String>, Boolean>> parsers = Arrays.asList(
+            this::parseHeader,
+            this::parseQuote,
+            this::parseBlockCode,
+            (html, i) -> parseOL(html, i, 0, 0),
+            (html, i) -> parseUL(html, i, 0, 0)
     );
 
     int inList = 0; // Tracks the current depth of list nesting
@@ -58,17 +66,18 @@ public class MDParser {
         String precompiledMarkdown = precompile(md); // run precompiler to get rid of empty lines and merge continuously paragraphs
         LinkedList<String> lines = new LinkedList<>(Arrays.asList(precompiledMarkdown.split("\n"))); // separates markdown into lines
         ListIterator<String> lineIterator = lines.listIterator(); // initializes iterator to iterate between lines
-        parseMarkdown(html, lineIterator, 0); // calls recursive version of this parser function to build html
+        parseMarkdown(html, lineIterator); // calls recursive version of this parser function to build html
         return html; // returns built tree back to
     }
 
-    private void parseMarkdown(HTMLElement html, ListIterator<String> i, int indent) {
+    private void parseMarkdown(HTMLElement html, ListIterator<String> i) {
         if(i.hasNext()) {
-            if(parseHeader(html, i) || parseQuote(html, i) || parseBlockCode(html, i) || parseOL(html, i, 0, indent) || parseUL(html, i, 0, indent)) {
-                parseMarkdown(html, i, indent); // if something parsed then continue to parse next lines
-            } else parseParagraph(html, i); // parse the line as a paragraph if no other pattern matches
+            boolean parsed = parsers.stream().anyMatch(parser -> parser.apply(html, i));
+            if(!parsed) {
+                parseParagraph(html, i); // parse the line as a paragraph if no other pattern matches
+            }
             if (inList == 0) {
-                parseMarkdown(html, i, indent); // if something parsed then continue to parse next lines
+                parseMarkdown(html, i); // if something parsed then continue to parse next lines
             }
         }
     }
@@ -157,7 +166,7 @@ public class MDParser {
             i.remove(); // remove the current line from the iterator
             i.add(olMatcher.group(2)); // add the list item's content to the iterator
             i.previous(); // move back to process the added content
-            parseMarkdown(currentTree, i, indent); // parse the content of the list item
+            parseMarkdown(currentTree, i); // parse the content of the list item
             if(i.hasNext()) if(!parseOL(currentTree, i, parentIndent, indent)) inList=0; // check for nested lists
             return true; // indicate a successful match
         }
@@ -188,7 +197,7 @@ public class MDParser {
             i.remove(); // remove the current line from the iterator
             i.add(ulMatcher.group(2)); // add the list item's content to the iterator
             i.previous(); // move back to process the added content
-            parseMarkdown(currentTree, i, indent); // parse the content of the list item
+            parseMarkdown(currentTree, i); // parse the content of the list item
             if(i.hasNext()) if(!parseUL(currentTree, i, parentIndent, indent)) inList=0; // check for nested lists
             return true; // indicate a successful match
         }
