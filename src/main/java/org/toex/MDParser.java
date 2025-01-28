@@ -145,7 +145,7 @@ public class MDParser {
                     throw new RuntimeException(e); // handle exceptions
                 }
                 inList++; // increment the list nesting level
-            } else if(olMatcher.start(1) < parentIndent + 3) { // if the list is not nested
+            } else if(inList > 1 && olMatcher.start(1) < parentIndent + 3) { // if the list is not nested
                 currentTree = currentTree.getParent(); // move to the parent HTML element
                 indent = 0; // reset the indentation
                 inList--; // decrement the list nesting level
