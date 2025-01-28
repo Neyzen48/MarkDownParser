@@ -25,7 +25,7 @@ public class MDParser {
     };
 
     private List<BiFunction<HTMLElement, String, Boolean>> inlineParsers = Arrays.asList(
-            this::parseCode,
+            this::parseBlockCode,
             this::parseBoldItalic,
             this::parseStriketrough,
             this::parseImage,
@@ -64,7 +64,7 @@ public class MDParser {
 
     private void parseMarkdown(HTMLElement html, ListIterator<String> i, int indent) {
         if(i.hasNext()) {
-            if(parseHeader(html, i) || parseQuote(html, i) || parseCode(html, i) || parseOL(html, i, 0, indent) || parseUL(html, i, 0, indent)) {
+            if(parseHeader(html, i) || parseQuote(html, i) || parseBlockCode(html, i) || parseOL(html, i, 0, indent) || parseUL(html, i, 0, indent)) {
                 parseMarkdown(html, i, indent); // if something parsed then continue to parse next lines
             } else parseParagraph(html, i); // parse the line as a paragraph if no other pattern matches
             if (inList == 0) {
@@ -103,7 +103,7 @@ public class MDParser {
         return false; // indicate no match found
     }
 
-    private boolean parseCode(HTMLElement html, ListIterator<String> i) {
+    private boolean parseBlockCode(HTMLElement html, ListIterator<String> i) {
         String line = i.next(); // get the current line
 
         if (line.stripTrailing().matches("^ {0,4}```(.*)")) {
@@ -242,7 +242,7 @@ public class MDParser {
         return false;
     }
 
-    private boolean parseCode(HTMLElement html, String text) {
+    private boolean parseBlockCode(HTMLElement html, String text) {
         Matcher matcher = codePattern.matcher(text);
         if(matcher.find()) {
             try {
